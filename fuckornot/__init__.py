@@ -44,6 +44,8 @@ fuck = on_alconna(
             default="简短模式",
         ),
     ),
+    block=True,
+    priority=5,
 )
 
 
