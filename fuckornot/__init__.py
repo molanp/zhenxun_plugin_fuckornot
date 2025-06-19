@@ -1,3 +1,4 @@
+import asyncio
 import base64
 from pathlib import Path
 from typing import Literal
@@ -8,6 +9,7 @@ from nonebot_plugin_htmlrender import template_to_pic
 import ujson
 
 from zhenxun.configs.utils import PluginExtraData
+from zhenxun.services.log import logger
 from zhenxun.utils.http_utils import AsyncHttpx
 
 from .prompt import get_prompt
@@ -34,6 +36,8 @@ __plugin_meta__ = PluginMetadata(
     ).dict(),
 )
 
+MAX_RETRIES = 3
+
 fuck = on_alconna(
     Alconna(
         "上",
@@ -55,57 +59,73 @@ async def _(params: Arparma):
     assert isinstance(image, Image)
     mode = params.query("mode")
     prompt = get_prompt(mode)
-    try:
-        if image.url is None:
-            raise ValueError("图片资源下载失败!")
-        image_bytes = await AsyncHttpx.get_content(image.url)
-        result = await AsyncHttpx.post(
-            "https://api.websim.com/api/v1/inference/run_chat_completion",
-            json={
-                "project_id": "vno75_2x4ii3ayx8wmmw",
-                "messages": [
-                    {
-                        "role": "system",
-                        "content": prompt,
-                    },
-                    {
-                        "role": "user",
-                        "content": [
-                            {
-                                "type": "text",
-                                "text": "请分析这张图片并决定的：上还是不上？",
-                            },
-                            {
-                                "type": "image_url",
-                                "image_url": {
-                                    "url": (
-                                        "data:image/jpeg;base64,"
-                                        f"{base64.b64encode(image_bytes).decode('utf-8')}"
-                                    )
+
+    if image.url is None:
+        await fuck.send("图片资源无效，请重新发送图片！", reply_to=True)
+        return
+
+    image_bytes = await AsyncHttpx.get_content(image.url)
+    b64url = f"data:image/jpeg;base64,{base64.b64encode(image_bytes).decode('utf-8')}"
+    retry_count = 0
+    backoff_factor = 0.2  # 初始退避因子
+
+    while retry_count <= MAX_RETRIES:
+        try:
+            result = await AsyncHttpx.post(
+                "https://api.websim.com/api/v1/inference/run_chat_completion",
+                json={
+                    "project_id": "vno75_2x4ii3ayx8wmmw",
+                    "messages": [
+                        {
+                            "role": "system",
+                            "content": prompt,
+                        },
+                        {
+                            "role": "user",
+                            "content": [
+                                {
+                                    "type": "text",
+                                    "text": "请分析这张图片并决定的：上还是不上？",
                                 },
-                            },
-                        ],
-                    },
-                ],
-                "json": True,
-            },
-        )
-        data = ujson.loads(result.json()["content"])
-        await fuck.send(
-            Image(
-                raw=await template_to_pic(
-                    str(Path(__file__).parent),
-                    "result.html",
-                    templates={
-                        "verdict": data["verdict"],
-                        "rating": data["rating"],
-                        "explanation": data["explanation"],
-                    },
+                                {
+                                    "type": "image_url",
+                                    "image_url": {"url": b64url},
+                                },
+                            ],
+                        },
+                    ],
+                    "json": True,
+                },
+                timeout=10,
+            )
+
+            data = ujson.loads(result.json()["content"])
+
+            await fuck.send(
+                Image(
+                    raw=await template_to_pic(
+                        str(Path(__file__).parent),
+                        "result.html",
+                        templates={
+                            "verdict": data["verdict"],
+                            "rating": data["rating"],
+                            "explanation": data["explanation"],
+                        },
+                    )
+                ),
+                reply_to=True,
+            )
+            return
+
+        except Exception as e:
+            retry_count += 1
+            logger.error(f"评分失败，第{retry_count}次重试中... 错误: {e}")
+
+            if retry_count > MAX_RETRIES:
+                await fuck.send(
+                    f"评分失败，请稍后再试.\n错误信息: {type(e)}:{e}", reply_to=True
                 )
-            ),
-            reply_to=True,
-        )
-    except Exception as e:
-        await fuck.send(
-            f"评分失败，请稍后再试.\n错误信息: {type(e)}:{e}", reply_to=True
-        )
+                return
+
+            # 指数退避
+            await asyncio.sleep(backoff_factor * (2**retry_count))
