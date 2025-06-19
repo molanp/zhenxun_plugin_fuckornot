@@ -100,7 +100,10 @@ async def _(params: Arparma):
                         "explanation": data["explanation"],
                     },
                 )
-            )
+            ),
+            reply_to=True,
         )
     except Exception as e:
-        await fuck.send(f"评分失败，请稍后再试.\n错误信息: {type(e)}:{e}")
+        await fuck.send(
+            f"评分失败，请稍后再试.\n错误信息: {type(e)}:{e}", reply_to=True
+        )
