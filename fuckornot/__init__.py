@@ -24,7 +24,7 @@ from zhenxun.configs.utils import PluginExtraData, RegisterConfig
 from zhenxun.services.log import logger
 from zhenxun.utils.http_utils import AsyncHttpx
 from zhenxun.utils.platform import PlatformUtils
-
+from nonebot.exception import IgnoredException
 from .prompt import get_prompt
 
 __plugin_meta__ = PluginMetadata(
@@ -68,8 +68,6 @@ __plugin_meta__ = PluginMetadata(
     ).dict(),
 )
 
-MAX_RETRIES = 3
-
 fuck = on_alconna(
     Alconna(
         "上",
@@ -101,101 +99,91 @@ async def _(bot, event, params: Arparma):
     elif isinstance(image, At):
         image_bytes = await PlatformUtils.get_user_avatar(image.target, "qq")
     else:
-        return
+        raise IgnoredException("缺失资源图片")
     if not image_bytes:
         await fuck.send("下载图片失败QAQ...", reply_to=True)
-        return
+        raise IgnoredException("缺失资源图片")
     data = None
-    retry_count = 0
-    backoff_factor = 0.2
     base_url = Config.get_config("fuckornot", "base_url")
     model = Config.get_config("fuckornot", "model")
     api_key = Config.get_config("fuckornot", "api_key")
     chat_url = f"{base_url}/v1beta/models/{model}:generateContent?key={api_key}"
 
-    while retry_count <= MAX_RETRIES:
-        try:
-            result = await AsyncHttpx.post(
-                chat_url,
-                json={
-                    "system_instruction": {"parts": [{"text": prompt}]},
-                    "contents": [
-                        {
-                            "role": "user",
-                            "parts": [
-                                {
-                                    "text": "请分析这张图片并决定的：上还是不上？",
+    try:
+        result = await AsyncHttpx.post(
+            chat_url,
+            json={
+                "system_instruction": {"parts": [{"text": prompt}]},
+                "contents": [
+                    {
+                        "role": "user",
+                        "parts": [
+                            {
+                                "text": "请分析这张图片并决定的：上还是不上？",
+                            },
+                            {
+                                "inline_data": {
+                                    "data": base64.b64encode(image_bytes).decode(
+                                        "utf-8"
+                                    ),
+                                    "mime_type": "image/jpeg",
                                 },
-                                {
-                                    "inline_data": {
-                                        "data": base64.b64encode(image_bytes).decode(
-                                            "utf-8"
-                                        ),
-                                        "mime_type": "image/jpeg",
-                                    },
-                                },
-                            ],
-                        },
-                    ],
-                    "generationConfig": {
-                        "thinkingConfig": {"thinkingBudget": 0},
-                        "responseMimeType": "application/json",
-                        "responseSchema": {
-                            "type": "OBJECT",
-                            "properties": {
-                                "verdict": {
-                                    "type": "STRING",
-                                    "description": "'上' 或 '不上'",
-                                },
-                                "rating": {
-                                    "type": "STRING",
-                                    "description": "1到10的数字",
-                                },
-                                "explanation": {
-                                    "type": "STRING",
-                                    "description": "你的明确、粗俗的解释（中文）",
-                                },
+                            },
+                        ],
+                    },
+                ],
+                "generationConfig": {
+                    "thinkingConfig": {"thinkingBudget": 0},
+                    "responseMimeType": "application/json",
+                    "responseSchema": {
+                        "type": "OBJECT",
+                        "properties": {
+                            "verdict": {
+                                "type": "STRING",
+                                "description": "'上' 或 '不上'",
+                            },
+                            "rating": {
+                                "type": "STRING",
+                                "description": "1到10的数字",
+                            },
+                            "explanation": {
+                                "type": "STRING",
+                                "description": "你的明确、粗俗的解释（中文）",
                             },
                         },
                     },
                 },
-                timeout=5,
-            )
-            data = ujson.loads(
-                result.json()["candidates"][0]["content"]["parts"][0]["text"]
-            )
+            },
+            timeout=5,
+        )
+        data = ujson.loads(
+            result.json()["candidates"][0]["content"]["parts"][0]["text"]
+        )
 
+        await fuck.send(
+            Image(
+                raw=await template_to_pic(
+                    str(Path(__file__).parent),
+                    "result.html",
+                    templates={
+                        "verdict": data["verdict"],
+                        "rating": data["rating"],
+                        "explanation": data["explanation"],
+                    },
+                )
+            ),
+            reply_to=True,
+        )
+
+    except Exception as e:
+        logger.error("评分失败...", "fuckornot", e=e)
+
+        if data and "error" in data:
             await fuck.send(
-                Image(
-                    raw=await template_to_pic(
-                        str(Path(__file__).parent),
-                        "result.html",
-                        templates={
-                            "verdict": data["verdict"],
-                            "rating": data["rating"],
-                            "explanation": data["explanation"],
-                        },
-                    )
-                ),
+                f"评分失败，请稍后再试.\n错误信息: {data['error']['message']}",
                 reply_to=True,
             )
-            return
-
-        except Exception as e:
-            retry_count += 1
-            logger.error(f"评分失败，第{retry_count}次重试中... 错误: {e}")
-
-            if retry_count >= MAX_RETRIES:
-                if data and "error" in data:
-                    await fuck.send(
-                        f"评分失败，请稍后再试.\n错误信息: {data['error']['message']}",
-                        reply_to=True,
-                    )
-                else:
-                    await fuck.send(
-                        f"评分失败，请稍后再试.\n错误信息: {type(e)}:{e}", reply_to=True
-                    )
-                return
-
-            # 指数退避
-            await asyncio.sleep(backoff_factor * (2**retry_count))
+        else:
+            await fuck.send(
+                f"评分失败，请稍后再试.\n错误信息: {type(e)}:{e}", reply_to=True
+            )
