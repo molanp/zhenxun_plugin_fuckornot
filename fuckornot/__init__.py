@@ -33,9 +33,8 @@ __plugin_meta__ = PluginMetadata(
     usage="""
     上传图片，让AI来评判它的可操性
         上 [图片]
-        [回复]上
-        上 @user
-    也可以通过附加参数(--m)来指定风格
+    或 **引用一张图片**
+    也可以通过附加参数来指定风格
     简短模式: 短平快，1-2句，够味
     详细模式:细嗦3+句，够劲
     小说模式:全程15+句教你咋上，纯硬核
@@ -100,7 +99,7 @@ async def _(bot, event, params: Arparma):
     if isinstance(image, Image) and image.url:
         image_bytes = await AsyncHttpx.get_content(image.url)
     elif isinstance(image, At):
-        image_bytes = await PlatformUtils.get_user_avatar("qq", image.target)
+        image_bytes = await PlatformUtils.get_user_avatar(image.target, "qq")
     else:
         return
     if not image_bytes:
