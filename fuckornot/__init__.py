@@ -8,6 +8,7 @@ from nonebot_plugin_alconna import (
     Alconna,
     Args,
     Arparma,
+    At,
     Image,
     Option,
     Reply,
@@ -22,6 +23,7 @@ from zhenxun.configs.config import Config
 from zhenxun.configs.utils import PluginExtraData, RegisterConfig
 from zhenxun.services.log import logger
 from zhenxun.utils.http_utils import AsyncHttpx
+from zhenxun.utils.platform import PlatformUtils
 
 from .prompt import get_prompt
 
@@ -71,7 +73,7 @@ MAX_RETRIES = 3
 fuck = on_alconna(
     Alconna(
         "上",
-        Args["image?", Image],
+        Args["image?", Image | At],
         Option(
             "--m",
             Args["mode", Literal["简短模式", "详细模式", "小说模式"]],
@@ -86,25 +88,26 @@ fuck = on_alconna(
 @fuck.handle()
 async def _(bot, event, params: Arparma):
     image = params.query("image") or await reply_fetch(event, bot)
+    mode = params.query("mode")
+    prompt = get_prompt(mode)
     if isinstance(image, Reply) and not isinstance(image.msg, str):
         image = await UniMessage.generate(message=image.msg, event=event, bot=bot)
         for i in image:
             if isinstance(i, Image):
                 image = i
                 break
-    if not isinstance(image, Image):
+    if isinstance(image, Image) and image.url:
+        image_bytes = await AsyncHttpx.get_content(image.url)
+    elif isinstance(image, At):
+        image_bytes = await PlatformUtils.get_user_avatar("qq", image.target)
+    else:
         return
-    mode = params.query("mode")
-    prompt = get_prompt(mode)
-
-    if image.url is None:
-        await fuck.send("图片资源无效，请重新发送图片！", reply_to=True)
+    if not image_bytes:
+        await fuck.send("下载图片失败QAQ...", reply_to=True)
         return
-
-    image_bytes = await AsyncHttpx.get_content(image.url)
     data = None
     retry_count = 0
-    backoff_factor = 0.2  # 初始退避因子
+    backoff_factor = 0.2
     base_url = Config.get_config("fuckornot", "base_url")
     model = Config.get_config("fuckornot", "model")
     api_key = Config.get_config("fuckornot", "api_key")
