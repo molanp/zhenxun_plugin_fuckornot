@@ -28,13 +28,14 @@ from zhenxun.utils.platform import PlatformUtils
 from .prompt import get_prompt
 
 __plugin_meta__ = PluginMetadata(
-    name="上不上AI评分系统",
+    name="上不上",
     description="上不上AI评分系统",
     usage="""
     上传图片，让AI来评判它的可操性
         上 [图片]
-    或 **引用一张图片**
-    也可以通过附加参数来指定风格
+        [回复]上
+        上 @user
+    也可以通过附加参数(--m)来指定风格
     简短模式: 短平快，1-2句，够味
     详细模式:细嗦3+句，够劲
     小说模式:全程15+句教你咋上，纯硬核
