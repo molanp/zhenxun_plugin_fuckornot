@@ -4,11 +4,22 @@ from pathlib import Path
 from typing import Literal
 
 from nonebot.plugin import PluginMetadata
-from nonebot_plugin_alconna import Alconna, Args, Arparma, Image, Option, on_alconna
+from nonebot_plugin_alconna import (
+    Alconna,
+    Args,
+    Arparma,
+    Image,
+    Option,
+    Reply,
+    UniMessage,
+    on_alconna,
+)
+from nonebot_plugin_alconna.uniseg.tools import reply_fetch
 from nonebot_plugin_htmlrender import template_to_pic
 import ujson
 
-from zhenxun.configs.utils import PluginExtraData
+from zhenxun.configs.config import Config
+from zhenxun.configs.utils import PluginExtraData, RegisterConfig
 from zhenxun.services.log import logger
 from zhenxun.utils.http_utils import AsyncHttpx
 
@@ -20,6 +31,7 @@ __plugin_meta__ = PluginMetadata(
     usage="""
     上传图片，让AI来评判它的可操性
         上 [图片]
+    或 **引用一张图片**
     也可以通过附加参数来指定风格
     简短模式: 短平快，1-2句，够味
     详细模式:细嗦3+句，够劲
@@ -31,8 +43,26 @@ __plugin_meta__ = PluginMetadata(
     """.strip(),
     extra=PluginExtraData(
         author="molanp",
-        version="1.0.1",
+        version="1.1",
         menu_type="群内小游戏",
+        configs=[
+            RegisterConfig(
+                key="base_url",
+                value="https://generativelanguage.googleapis.com",
+                help="Gemini API根地址(镜像: https://api-proxy.me/gemini)",
+                default_value="https://generativelanguage.googleapis.com",
+            ),
+            RegisterConfig(
+                key="api_key",
+                value=None,
+                help="Gemini API密钥",
+            ),
+            RegisterConfig(
+                key="model",
+                value="gemini-2.5-flash-preview-05-20",
+                help="Gemini AI 模型名称",
+            ),
+        ],
     ).dict(),
 )
 
@@ -41,7 +71,7 @@ MAX_RETRIES = 3
 fuck = on_alconna(
     Alconna(
         "上",
-        Args["image", Image],
+        Args["image?", Image],
         Option(
             "--m",
             Args["mode", Literal["简短模式", "详细模式", "小说模式"]],
@@ -54,9 +84,16 @@ fuck = on_alconna(
 
 
 @fuck.handle()
-async def _(params: Arparma):
-    image = params.query("image")
-    assert isinstance(image, Image)
+async def _(bot, event, params: Arparma):
+    image = params.query("image") or await reply_fetch(event, bot)
+    if isinstance(image, Reply) and not isinstance(image.msg, str):
+        image = await UniMessage.generate(message=image.msg, event=event, bot=bot)
+        for i in image:
+            if isinstance(i, Image):
+                image = i
+                break
+    if not isinstance(image, Image):
+        return
     mode = params.query("mode")
     prompt = get_prompt(mode)
 
@@ -65,41 +102,65 @@ async def _(params: Arparma):
         return
 
     image_bytes = await AsyncHttpx.get_content(image.url)
-    b64url = f"data:image/jpeg;base64,{base64.b64encode(image_bytes).decode('utf-8')}"
+    data = None
     retry_count = 0
     backoff_factor = 0.2  # 初始退避因子
+    base_url = Config.get_config("fuckornot", "base_url")
+    model = Config.get_config("fuckornot", "model")
+    api_key = Config.get_config("fuckornot", "api_key")
+    chat_url = f"{base_url}/v1beta/models/{model}:generateContent?key={api_key}"
 
     while retry_count <= MAX_RETRIES:
         try:
             result = await AsyncHttpx.post(
-                "https://api.websim.com/api/v1/inference/run_chat_completion",
+                chat_url,
                 json={
-                    "project_id": "vno75_2x4ii3ayx8wmmw",
-                    "messages": [
-                        {
-                            "role": "system",
-                            "content": prompt,
-                        },
+                    "system_instruction": {"parts": [{"text": prompt}]},
+                    "contents": [
                         {
                             "role": "user",
-                            "content": [
+                            "parts": [
                                 {
-                                    "type": "text",
                                     "text": "请分析这张图片并决定的：上还是不上？",
                                 },
                                 {
-                                    "type": "image_url",
-                                    "image_url": {"url": b64url},
+                                    "inline_data": {
+                                        "data": base64.b64encode(image_bytes).decode(
+                                            "utf-8"
+                                        ),
+                                        "mime_type": "image/jpeg",
+                                    },
                                 },
                             ],
                         },
                     ],
-                    "json": True,
+                    "generationConfig": {
+                        "thinkingConfig": {"thinkingBudget": 0},
+                        "responseMimeType": "application/json",
+                        "responseSchema": {
+                            "type": "OBJECT",
+                            "properties": {
+                                "verdict": {
+                                    "type": "STRING",
+                                    "description": "'上' 或 '不上'",
+                                },
+                                "rating": {
+                                    "type": "STRING",
+                                    "description": "1到10的数字",
+                                },
+                                "explanation": {
+                                    "type": "STRING",
+                                    "description": "你的明确、粗俗的解释（中文）",
+                                },
+                            },
+                        },
+                    },
                 },
                 timeout=10,
             )
-
-            data = ujson.loads(result.json()["content"])
+            data = ujson.loads(
+                result.json()["candidates"][0]["content"]["parts"][0]["text"]
+            )
 
             await fuck.send(
                 Image(
@@ -121,10 +182,16 @@ async def _(params: Arparma):
             retry_count += 1
             logger.error(f"评分失败，第{retry_count}次重试中... 错误: {e}")
 
-            if retry_count > MAX_RETRIES:
-                await fuck.send(
-                    f"评分失败，请稍后再试.\n错误信息: {type(e)}:{e}", reply_to=True
-                )
+            if retry_count >= MAX_RETRIES:
+                if data and "error" in data:
+                    await fuck.send(
+                        f"评分失败，请稍后再试.\n错误信息: {data['error']['message']}",
+                        reply_to=True,
+                    )
+                else:
+                    await fuck.send(
+                        f"评分失败，请稍后再试.\n错误信息: {type(e)}:{e}", reply_to=True
+                    )
                 return
 
             # 指数退避
