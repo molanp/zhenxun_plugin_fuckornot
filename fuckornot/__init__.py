@@ -1,8 +1,8 @@
-import asyncio
 import base64
 from pathlib import Path
 from typing import Literal
 
+from nonebot.exception import IgnoredException
 from nonebot.plugin import PluginMetadata
 from nonebot_plugin_alconna import (
     Alconna,
@@ -24,7 +24,8 @@ from zhenxun.configs.utils import PluginExtraData, RegisterConfig
 from zhenxun.services.log import logger
 from zhenxun.utils.http_utils import AsyncHttpx
 from zhenxun.utils.platform import PlatformUtils
-from nonebot.exception import IgnoredException
+from zhenxun.utils.withdraw_manage import WithdrawManager
+
 from .prompt import get_prompt
 
 __plugin_meta__ = PluginMetadata(
@@ -64,6 +65,9 @@ __plugin_meta__ = PluginMetadata(
                 value="gemini-2.5-flash-preview-05-20",
                 help="Gemini AI 模型名称",
             ),
+            RegisterConfig(
+                key="withdraw_time", value=30, help="撤回时间,单位秒, 0为不撤回"
+            ),
         ],
     ).dict(),
 )
@@ -99,11 +103,11 @@ async def _(bot, event, params: Arparma):
     elif isinstance(image, At):
         image_bytes = await PlatformUtils.get_user_avatar(image.target, "qq")
     else:
-        raise IgnoredException("缺失资源图片")
+        return
     if not image_bytes:
-        await fuck.send("下载图片失败QAQ...", reply_to=True)
-        raise IgnoredException("缺失资源图片")
-    data = None
+        await UniMessage("下载图片失败QAQ...").send(reply_to=True)
+        return
+    data = {}
     base_url = Config.get_config("fuckornot", "base_url")
     model = Config.get_config("fuckornot", "model")
     api_key = Config.get_config("fuckornot", "api_key")
@@ -156,11 +160,10 @@ async def _(bot, event, params: Arparma):
             },
             timeout=5,
         )
-        data = ujson.loads(
-            result.json()["candidates"][0]["content"]["parts"][0]["text"]
-        )
+        data = result.json()
+        data = ujson.loads(data["candidates"][0]["content"]["parts"][0]["text"])
 
-        await fuck.send(
+        receipt = await UniMessage(
             Image(
                 raw=await template_to_pic(
                     str(Path(__file__).parent),
@@ -171,19 +174,29 @@ async def _(bot, event, params: Arparma):
                         "explanation": data["explanation"],
                     },
                 )
-            ),
-            reply_to=True,
-        )
+            )
+        ).send(reply_to=True)
+        if Config.get_config("fuckornot", "withdraw_time") > 0:
+            await WithdrawManager.withdraw_message(
+                bot,
+                receipt.msg_ids[0]["message_id"],
+                time=Config.get_config("fuckornot", "withdraw_time"),
+            )
 
     except Exception as e:
-        logger.error("评分失败...", "fuckornot", e=e)
-
-        if data and "error" in data:
-            await fuck.send(
-                f"评分失败，请稍后再试.\n错误信息: {data['error']['message']}",
-                reply_to=True,
-            )
+        logger.error(f"评分失败...\n{data}", "fuckornot", e=e)
+        error_msg = data.get("candidates", [{}])[0].get("finishReason")
+        if error_msg:
+            receipt = await UniMessage(
+                f"评分失败，请稍后再试.\n错误信息: {error_msg}"
+            ).send(reply_to=True)
         else:
-            await fuck.send(
-                f"评分失败，请稍后再试.\n错误信息: {type(e)}:{e}", reply_to=True
+            receipt = await UniMessage(
+                f"评分失败，请稍后再试.\n错误信息: {type(e)}:{e}"
+            ).send(reply_to=True)
+        if Config.get_config("fuckornot", "withdraw_time") > 0:
+            await WithdrawManager.withdraw_message(
+                bot,
+                receipt.msg_ids[0]["message_id"],
+                time=Config.get_config("fuckornot", "withdraw_time"),
             )
