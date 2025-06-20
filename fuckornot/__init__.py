@@ -159,7 +159,7 @@ async def _(bot, event, params: Arparma):
                         },
                     },
                 },
-                timeout=10,
+                timeout=5,
             )
             data = ujson.loads(
                 result.json()["candidates"][0]["content"]["parts"][0]["text"]
