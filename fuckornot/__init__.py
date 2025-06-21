@@ -83,7 +83,7 @@ fuck = on_alconna(
         ),
     ),
     block=True,
-    priority=5,
+    priority=30,
 )
 
 
