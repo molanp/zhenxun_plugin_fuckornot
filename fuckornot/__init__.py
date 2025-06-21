@@ -137,7 +137,6 @@ async def _(bot, event, params: Arparma):
                     },
                 ],
                 "generationConfig": {
-                    "thinkingConfig": {"thinkingBudget": 0},
                     "responseMimeType": "application/json",
                     "responseSchema": {
                         "type": "OBJECT",
