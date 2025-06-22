@@ -46,7 +46,7 @@ __plugin_meta__ = PluginMetadata(
     """.strip(),
     extra=PluginExtraData(
         author="molanp",
-        version="1.2",
+        version="1.3",
         menu_type="群内小游戏",
         configs=[
             RegisterConfig(
@@ -154,6 +154,8 @@ async def _(bot, event, params: Arparma):
                                 "description": "你的明确、粗俗的解释（中文）",
                             },
                         },
+                        "nullable": False,
+                        "required": ["verdict", "rating", "explanation"],
                     },
                 },
                 "safetySettings": [
@@ -179,7 +181,7 @@ async def _(bot, event, params: Arparma):
                     },
                 ],
             },
-            timeout=5,
+            timeout=30,
         )
         data = result.json()
         data = ujson.loads(data["candidates"][0]["content"]["parts"][0]["text"])
