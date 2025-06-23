@@ -25,3 +25,8 @@
 - 上 [图片] --m 简短模式
 - 上 [图片] --m 详细模式
 - 上 [图片] --m 小说模式
+
+
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=molanp/zhenxun_plugin_fuckornot&type=Date)](https://www.star-history.com/#molanp/zhenxun_plugin_fuckornot&Date)
