@@ -89,6 +89,10 @@ try:
     default_soul = Config.get_config("fuckornot", "default_soul")
 except Exception:
     default_soul = "欲望化身"
+finally:
+    if not default_soul:
+        default_soul = "欲望化身"
+
 
 fuck = on_alconna(
     Alconna(
@@ -108,7 +112,6 @@ fuck = on_alconna(
                     int,
                 ],
             ],
-            default=default_soul,
         ),
     ),
     block=True,
@@ -119,7 +122,7 @@ fuck = on_alconna(
 @fuck.handle()
 async def _(bot, event, params: Arparma):
     image = params.query("image") or await reply_fetch(event, bot)
-    soul = params.query("soul")
+    soul = params.query("soul") or default_soul
     assert soul is not None
     try:
         prompt = get_prompt(soul)
