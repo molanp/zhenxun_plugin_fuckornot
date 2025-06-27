@@ -35,18 +35,22 @@ __plugin_meta__ = PluginMetadata(
         上 [图片]
         上 @user
         [回复]上
-    也可以通过附加参数来指定风格
-    简短模式: 短平快，1-2句，够味
-    详细模式:细嗦3+句，够劲
-    小说模式:全程15+句教你咋上，纯硬核
+
+    -----人格列表，可以使用序号或名称指定人格-----
+    |1 | 欲望化身
+    |2 | 霸道总裁
+    |3 | 耽美鉴赏家
+    |4 | 恋物诗人
+    |5 | 纯欲神官
+    |6 | 百合诗人
+
     例如:
-        上 [图片] --m 简短模式
-        上 [图片] --m 详细模式
-        上 [图片] --m 小说模式
+        上 -s 1 [图片]
+        上 -s 霸道总裁 [图片]
     """.strip(),
     extra=PluginExtraData(
         author="molanp",
-        version="1.3",
+        version="1.4",
         menu_type="群内小游戏",
         configs=[
             RegisterConfig(
@@ -62,24 +66,49 @@ __plugin_meta__ = PluginMetadata(
             ),
             RegisterConfig(
                 key="model",
-                value="gemini-2.5-flash-preview-05-20",
+                value="gemini-2.5-flash-lite-preview-06-17",
                 help="Gemini AI 模型名称",
             ),
             RegisterConfig(
                 key="withdraw_time", value=30, help="撤回时间,单位秒, 0为不撤回"
             ),
+            RegisterConfig(
+                key="default_soul",
+                value="欲望化身",
+                help="不指定时的默认AI人格名称",
+            ),
+            RegisterConfig(
+                key="preview",
+                value=False,
+                help="是否在结果中展示输入图片",
+            ),
         ],
     ).dict(),
 )
+try:
+    default_soul = Config.get_config("fuckornot", "default_soul")
+except Exception:
+    default_soul = "欲望化身"
 
 fuck = on_alconna(
     Alconna(
         "上",
         Args["image?", Image | At],
         Option(
-            "--m",
-            Args["mode", Literal["简短模式", "详细模式", "小说模式"]],
-            default="简短模式",
+            "-s",
+            Args[
+                "soul",
+                Literal[
+                    "欲望化身",
+                    "霸道总裁",
+                    "耽美鉴赏家",
+                    "恋物诗人",
+                    "纯欲神官",
+                    "百合诗人",
+                    int,
+                ],
+            ],
+            default=default_soul,
         ),
     ),
     block=True,
@@ -90,8 +119,12 @@ fuck = on_alconna(
 @fuck.handle()
 async def _(bot, event, params: Arparma):
     image = params.query("image") or await reply_fetch(event, bot)
-    mode = params.query("mode")
-    prompt = get_prompt(mode)
+    soul = params.query("soul")
+    assert soul is not None
+    try:
+        prompt = get_prompt(soul)
+    except ValueError as e:
+        await UniMessage(str(e)).finish(reply_to=True)
     if isinstance(image, Reply) and not isinstance(image.msg, str):
         image = await UniMessage.generate(message=image.msg, event=event, bot=bot)
         for i in image:
@@ -105,14 +138,15 @@ async def _(bot, event, params: Arparma):
     else:
         return
     if not image_bytes:
-        await UniMessage("下载图片失败QAQ...").send(reply_to=True)
-        return
+        await UniMessage("下载图片失败QAQ...").finish(reply_to=True)
     data = {}
     base_url = Config.get_config("fuckornot", "base_url")
     model = Config.get_config("fuckornot", "model")
     api_key = Config.get_config("fuckornot", "api_key")
+    preview = Config.get_config("fuckornot", "preview")
     chat_url = f"{base_url}/v1beta/models/{model}:generateContent?key={api_key}"
 
+    preview_src = base64.b64encode(image_bytes).decode("utf-8") if preview else ""
     try:
         result = await AsyncHttpx.post(
             chat_url,
@@ -123,7 +157,7 @@ async def _(bot, event, params: Arparma):
                         "role": "user",
                         "parts": [
                             {
-                                "text": "请分析这张图片并决定的：上还是不上？",
+                                "text": "开始游戏。请评估这张艺术品。",
                             },
                             {
                                 "inline_data": {
@@ -151,7 +185,7 @@ async def _(bot, event, params: Arparma):
                             },
                             "explanation": {
                                 "type": "STRING",
-                                "description": "你的明确、粗俗的解释（中文）",
+                                "description": "你的评语/解释",
                             },
                         },
                         "nullable": False,
@@ -195,6 +229,7 @@ async def _(bot, event, params: Arparma):
                         "verdict": data["verdict"],
                         "rating": data["rating"],
                         "explanation": data["explanation"],
+                        "src": preview_src,
                     },
                 )
             )
