@@ -1,19 +1,28 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-cn">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>评分结果</title>
     <style>
-      .smash {
-        background-color: rgba(255, 107, 107, 0.1);
-        border: 2px solid #ff6b6b;
+      .result.上 {
+        background-color: color-mix(in srgb, #f44336 15%, transparent);
+        border-color: #f44336;
+      }
+      .result.不上 {
+        background-color: color-mix(in srgb, #4caf50 15%, transparent);
+        border-color: #4caf50;
       }
       .result {
         text-align: center;
         padding: 20px;
-        border-radius: 8px;
+        border-radius: 20px;
         max-width: 800px;
+        border: 2px solid;
+      }
+      .result img {
+        width: 80%;
+        border-radius: 12px;
       }
       * {
         margin: 0;
@@ -41,7 +50,10 @@
     </style>
   </head>
   <body>
-    <div class="result smash">
+    <div class="result {{ verdict }}">
+      {% if src %}
+      <img src="data:image/jpeg;base64,{{ src }}" />
+      {% endif %}
       <div class="verdict-container">
         <h2 id="verdict">评分: {{ verdict }} ({{rating}}/10)</h2>
         <div id="verdict-icon">{{ "👍" if verdict == "上" else "👎"}}</div>
