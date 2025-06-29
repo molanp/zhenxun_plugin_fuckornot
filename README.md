@@ -30,4 +30,4 @@
 
 ## Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=molanp/zhenxun_plugin_fuckornot&type=Date)](https://www.star-history.com/#molanp/zhenxun_plugin_fuckornot&Date)
+[![Star History Chart](https://api.star-history.com/svg?repos=molanp/zhenxun_plugin_fuckornot&type=Timeline)](https://www.star-history.com/#molanp/zhenxun_plugin_fuckornot&Timeline)
