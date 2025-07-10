@@ -71,7 +71,10 @@ __plugin_meta__ = PluginMetadata(
                 help="Gemini AI 模型名称",
             ),
             RegisterConfig(
-                key="withdraw_time", value=30, help="撤回时间,单位秒, 0为不撤回"
+                key="withdraw_time",
+                value=30,
+                type=int,
+                help="撤回时间,单位秒, 0为不撤回"
             ),
             RegisterConfig(
                 key="default_soul",
@@ -81,6 +84,7 @@ __plugin_meta__ = PluginMetadata(
             RegisterConfig(
                 key="preview",
                 value=False,
+                type=bool,
                 help="是否在结果中展示输入图片",
             ),
         ],
