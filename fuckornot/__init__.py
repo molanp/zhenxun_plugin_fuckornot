@@ -259,7 +259,7 @@ async def _(bot, event, params: Arparma):
             ).send(reply_to=True)
         else:
             receipt = await UniMessage(
-                f"评分失败，请稍后再试.\n错误信息: {type(e)}:{e}"
+                f"评分失败，请稍后再试.\n错误信息: {type(e)}"
             ).send(reply_to=True)
         if Config.get_config("fuckornot", "withdraw_time") > 0:
             await WithdrawManager.withdraw_message(
