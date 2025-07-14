@@ -51,7 +51,7 @@ __plugin_meta__ = PluginMetadata(
     """.strip(),
     extra=PluginExtraData(
         author="molanp",
-        version="1.4",
+        version="1.5",
         menu_type="群内小游戏",
         configs=[
             RegisterConfig(
@@ -67,7 +67,7 @@ __plugin_meta__ = PluginMetadata(
             ),
             RegisterConfig(
                 key="model",
-                value="gemini-2.5-flash-lite-preview-06-17",
+                value="gemini-1.5-flash",
                 help="Gemini AI 模型名称",
             ),
             RegisterConfig(
