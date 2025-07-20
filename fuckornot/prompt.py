@@ -9,7 +9,10 @@ soul_list = {
     "恋物诗人": "fetish_poet",
     "纯欲神官": "oracle_of_purity",
     "百合诗人": "lily_poet",
-    "邪恶兽人控": "animal_avatar"
+    "邪恶兽人控": "animal_avatar",
+    "硬核-简短模式": "hardcore_simple",
+    "硬核-详细模式": "hardcore_detail",
+    "硬核-小说模式": "hardcore",
 }
 
 prompt: dict[str, str] = ujson.loads(
