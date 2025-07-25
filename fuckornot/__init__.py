@@ -54,7 +54,7 @@ __plugin_meta__ = PluginMetadata(
     """.strip(),
     extra=PluginExtraData(
         author="molanp",
-        version="1.5",
+        version="1.6",
         menu_type="群内小游戏",
         configs=[
             RegisterConfig(
@@ -118,6 +118,9 @@ fuck = on_alconna(
                     "纯欲神官",
                     "百合诗人",
                     "邪恶兽人控",
+                    "硬核-简短模式",
+                    "硬核-详细模式",
+                    "硬核-小说模式",
                     int,
                 ],
             ],
@@ -229,8 +232,14 @@ async def _(bot, event, params: Arparma):
             },
             timeout=30,
         )
-        data = result.json()
-        data = ujson.loads(data["candidates"][0]["content"]["parts"][0]["text"])
+        r: str = result.json()["candidates"][0]["content"]["parts"][0]["text"]
+        if "`" in data:
+            r = r.replace("`", "")
+        if "json" in data:
+            r = r.replace("json", "")
+        if "\n" in data:
+            r = r.replace("\n", "")
+        data: dict = ujson.loads(r)
 
         receipt = await UniMessage(
             Image(
