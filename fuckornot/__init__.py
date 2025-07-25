@@ -236,10 +236,12 @@ async def _(bot, event, params: Arparma):
         res = data["candidates"][0]["content"]["parts"][0]["text"]
         if "`" in res:
             res = res.replace("`", "")
-        if "json" in data:
+        if "json" in res:
             res = res.replace("json", "")
-        if "\n" in data:
+        if "\n" in res:
             res = res.replace("\n", "")
+        if r"\n" in res:
+            res = res.replace(r"\n", "")
         data: dict = ujson.loads(res)
 
         receipt = await UniMessage(
