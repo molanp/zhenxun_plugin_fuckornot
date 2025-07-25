@@ -232,14 +232,15 @@ async def _(bot, event, params: Arparma):
             },
             timeout=30,
         )
-        r: str = result.json()["candidates"][0]["content"]["parts"][0]["text"]
-        if "`" in r:
-            r = r.replace("`", "")
-        if "json" in r:
-            r = r.replace("json", "")
-        if "\n" in r:
-            r = r.replace("\n", "")
-        data: dict = ujson.loads(r)
+        data = result.json()
+        res = data["candidates"][0]["content"]["parts"][0]["text"]
+        if "`" in res:
+            res = res.replace("`", "")
+        if "json" in data:
+            res = res.replace("json", "")
+        if "\n" in data:
+            res = res.replace("\n", "")
+        data: dict = ujson.loads(res)
 
         receipt = await UniMessage(
             Image(
@@ -263,7 +264,7 @@ async def _(bot, event, params: Arparma):
             )
 
     except Exception as e:
-        logger.error(f"评分失败...\n{r}", "fuckornot", e=e)
+        logger.error(f"评分失败...\n{data}", "fuckornot", e=e)
         error_msg = data.get("candidates", [{}])[0].get("finishReason")
         if error_msg:
             receipt = await UniMessage(
