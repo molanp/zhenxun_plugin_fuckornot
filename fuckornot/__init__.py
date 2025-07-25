@@ -263,7 +263,7 @@ async def _(bot, event, params: Arparma):
             )
 
     except Exception as e:
-        logger.error(f"评分失败...\n{data}", "fuckornot", e=e)
+        logger.error(f"评分失败...\n{r}", "fuckornot", e=e)
         error_msg = data.get("candidates", [{}])[0].get("finishReason")
         if error_msg:
             receipt = await UniMessage(
