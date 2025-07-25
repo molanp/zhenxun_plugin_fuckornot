@@ -233,11 +233,11 @@ async def _(bot, event, params: Arparma):
             timeout=30,
         )
         r: str = result.json()["candidates"][0]["content"]["parts"][0]["text"]
-        if "`" in data:
+        if "`" in r:
             r = r.replace("`", "")
-        if "json" in data:
+        if "json" in r:
             r = r.replace("json", "")
-        if "\n" in data:
+        if "\n" in r:
             r = r.replace("\n", "")
         data: dict = ujson.loads(r)
 
