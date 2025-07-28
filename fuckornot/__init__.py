@@ -1,6 +1,5 @@
 import base64
 from pathlib import Path
-from typing import Literal
 
 from nonebot.plugin import PluginMetadata
 from nonebot_plugin_alconna import (
@@ -110,7 +109,7 @@ fuck = on_alconna(
             "-s",
             Args[
                 "soul",
-                Literal[
+                [
                     "欲望化身",
                     "霸道总裁",
                     "耽美鉴赏家",
