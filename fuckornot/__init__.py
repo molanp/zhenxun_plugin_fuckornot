@@ -1,6 +1,7 @@
 import base64
 from pathlib import Path
 
+from nonebot.adapters import Bot, Event
 from nonebot.plugin import PluginMetadata
 from nonebot_plugin_alconna import (
     Alconna,
@@ -19,6 +20,11 @@ import ujson
 
 from zhenxun.configs.config import Config
 from zhenxun.configs.utils import PluginExtraData, RegisterConfig
+from zhenxun.services.llm import get_model_instance
+from zhenxun.services.llm.config.generation import (
+    LLMGenerationConfig,
+)
+from zhenxun.services.llm.types.content import LLMContentPart, LLMMessage
 from zhenxun.services.log import logger
 from zhenxun.utils.http_utils import AsyncHttpx
 from zhenxun.utils.platform import PlatformUtils
@@ -53,24 +59,13 @@ __plugin_meta__ = PluginMetadata(
     """.strip(),
     extra=PluginExtraData(
         author="molanp",
-        version="1.6",
+        version="1.7",
         menu_type="群内小游戏",
         configs=[
             RegisterConfig(
-                key="base_url",
-                value="https://generativelanguage.googleapis.com",
-                help="Gemini API根地址(镜像: https://api-proxy.me/gemini)",
-                default_value="https://generativelanguage.googleapis.com",
-            ),
-            RegisterConfig(
-                key="api_key",
-                value=None,
-                help="Gemini API密钥",
-            ),
-            RegisterConfig(
-                key="model",
-                value="gemini-2.5-flash-lite-preview-06-17",
-                help="Gemini AI 模型名称",
+                key="provider",
+                value="Gemini/gemini-2.5-flash-lite-preview-06-17",
+                help="AI服务提供者",
             ),
             RegisterConfig(
                 key="withdraw_time",
@@ -92,13 +87,6 @@ __plugin_meta__ = PluginMetadata(
         ],
     ).dict(),
 )
-try:
-    default_soul = Config.get_config("fuckornot", "default_soul")
-except Exception:
-    default_soul = "欲望化身"
-finally:
-    if not default_soul:
-        default_soul = "欲望化身"
 
 
 fuck = on_alconna(
@@ -131,10 +119,11 @@ fuck = on_alconna(
 
 
 @fuck.handle()
-async def _(bot, event, params: Arparma):
+async def _(bot: Bot, event: Event,params: Arparma):
+    base_config = Config.get("fuckornot")
     image = params.query("image") or await reply_fetch(event, bot)
-    soul = params.query("soul") or default_soul
-    assert soul is not None
+    soul = params.query("soul") or base_config.get("default_soul")
+    withdraw_time = base_config.get("withdraw_time")
     try:
         prompt = get_prompt(soul)
     except ValueError as e:
@@ -154,84 +143,57 @@ async def _(bot, event, params: Arparma):
     if not image_bytes:
         await UniMessage("下载图片失败QAQ...").finish(reply_to=True)
     data = {}
-    base_url = Config.get_config("fuckornot", "base_url")
-    model = Config.get_config("fuckornot", "model")
-    api_key = Config.get_config("fuckornot", "api_key")
-    preview = Config.get_config("fuckornot", "preview")
-    chat_url = f"{base_url}/v1beta/models/{model}:generateContent?key={api_key}"
-
+    provider = base_config.get("provider")
+    preview = base_config.get("preview")
     preview_src = base64.b64encode(image_bytes).decode("utf-8") if preview else ""
-    try:
-        result = await AsyncHttpx.post(
-            chat_url,
-            json={
-                "system_instruction": {"parts": [{"text": prompt}]},
-                "contents": [
-                    {
-                        "role": "user",
-                        "parts": [
-                            {
-                                "text": "开始游戏。请评估这张艺术品。",
-                            },
-                            {
-                                "inline_data": {
-                                    "data": base64.b64encode(image_bytes).decode(
-                                        "utf-8"
-                                    ),
-                                    "mime_type": "image/jpeg",
-                                },
-                            },
-                        ],
-                    },
-                ],
-                "generationConfig": {
-                    "responseMimeType": "application/json",
-                    "responseSchema": {
-                        "type": "OBJECT",
-                        "properties": {
-                            "verdict": {
-                                "type": "STRING",
-                                "description": "'上' 或 '不上'",
-                            },
-                            "rating": {
-                                "type": "STRING",
-                                "description": "1到10的数字",
-                            },
-                            "explanation": {
-                                "type": "STRING",
-                                "description": "你的评语/解释",
-                            },
-                        },
-                        "nullable": False,
-                        "required": ["verdict", "rating", "explanation"],
-                    },
+
+    model_config = LLMGenerationConfig(
+        response_mime_type="application/json",
+        response_schema={
+            "type": "OBJECT",
+            "properties": {
+                "verdict": {
+                    "type": "STRING",
+                    "description": "'上' 或 '不上'",
                 },
-                "safetySettings": [
-                    {
-                        "category": "HARM_CATEGORY_HARASSMENT",
-                        "threshold": "BLOCK_NONE",
-                    },
-                    {
-                        "category": "HARM_CATEGORY_HATE_SPEECH",
-                        "threshold": "BLOCK_NONE",
-                    },
-                    {
-                        "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
-                        "threshold": "BLOCK_NONE",
-                    },
-                    {
-                        "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
-                        "threshold": "BLOCK_NONE",
-                    },
-                    {
-                        "category": "HARM_CATEGORY_CIVIC_INTEGRITY",
-                        "threshold": "BLOCK_NONE",
-                    },
-                ],
+                "rating": {
+                    "type": "STRING",
+                    "description": "1到10的数字",
+                },
+                "explanation": {
+                    "type": "STRING",
+                    "description": "你的评语/解释",
+                },
             },
-            timeout=30,
-        )
-        data = result.json()
+            "nullable": False,
+            "required": ["verdict", "rating", "explanation"],
+        },
+        # safety_settings={
+        #     "HARM_CATEGORY_HARASSMENT": "BLOCK_NONE",
+        #     "HARM_CATEGORY_HATE_SPEECH": "BLOCK_NONE",
+        #     "HARM_CATEGORY_SEXUALLY_EXPLICIT": "BLOCK_NONE",
+        #     "HARM_CATEGORY_DANGEROUS_CONTENT": "BLOCK_NONE",
+        #     "HARM_CATEGORY_CIVIC_INTEGRITY": "BLOCK_NONE",
+        # },
+    )
+    try:
+        async with await get_model_instance(provider) as model:
+            response = await model.generate_response(
+                messages=[
+                    LLMMessage.system(content=prompt),
+                    LLMMessage.user(
+                        [
+                            LLMContentPart.text_part("开始游戏。请评估这张艺术品"),
+                            LLMContentPart.image_base64_part(
+                                base64.b64encode(image_bytes).decode("utf-8"),
+                                "image/jpeg",
+                            ),
+                        ]
+                    ),
+                ],
+                config=model_config,
+            )
+            data = response.raw_response or {}
         res = data["candidates"][0]["content"]["parts"][0]["text"]
         if "`" in res:
             res = res.replace("`", "")
@@ -257,11 +219,11 @@ async def _(bot, event, params: Arparma):
                 )
             )
         ).send(reply_to=True)
-        if Config.get_config("fuckornot", "withdraw_time") > 0:
+        if withdraw_time > 0:
             await WithdrawManager.withdraw_message(
                 bot,
                 receipt.msg_ids[0]["message_id"],
-                time=Config.get_config("fuckornot", "withdraw_time"),
+                time=withdraw_time,
             )
 
     except Exception as e:
@@ -275,9 +237,9 @@ async def _(bot, event, params: Arparma):
             receipt = await UniMessage(
                 f"评分失败，请稍后再试.\n错误信息: {type(e)}"
             ).send(reply_to=True)
-        if Config.get_config("fuckornot", "withdraw_time") > 0:
+        if withdraw_time > 0:
             await WithdrawManager.withdraw_message(
                 bot,
                 receipt.msg_ids[0]["message_id"],
-                time=Config.get_config("fuckornot", "withdraw_time"),
+                time=withdraw_time,
             )
