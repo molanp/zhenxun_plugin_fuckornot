@@ -16,21 +16,18 @@ from nonebot_plugin_alconna import (
 )
 from nonebot_plugin_alconna.uniseg.tools import reply_fetch
 from nonebot_plugin_htmlrender import template_to_pic
-import ujson
 
 from zhenxun.configs.config import Config
 from zhenxun.configs.utils import PluginExtraData, RegisterConfig
-from zhenxun.services.llm import get_model_instance
-from zhenxun.services.llm.config.generation import (
-    LLMGenerationConfig,
-)
-from zhenxun.services.llm.types.content import LLMContentPart, LLMMessage
+from zhenxun.services.llm import generate_structured
+from zhenxun.services.llm.types.content import LLMContentPart
+from zhenxun.services.llm.types.exceptions import LLMException
 from zhenxun.services.log import logger
 from zhenxun.utils.http_utils import AsyncHttpx
 from zhenxun.utils.platform import PlatformUtils
 from zhenxun.utils.withdraw_manage import WithdrawManager
 
-from .prompt import get_prompt
+from .prompt import fuckResponse, get_prompt
 
 __plugin_meta__ = PluginMetadata(
     name="上不上",
@@ -59,7 +56,7 @@ __plugin_meta__ = PluginMetadata(
     """.strip(),
     extra=PluginExtraData(
         author="molanp",
-        version="1.7",
+        version="1.8",
         menu_type="群内小游戏",
         configs=[
             RegisterConfig(
@@ -119,7 +116,7 @@ fuck = on_alconna(
 
 
 @fuck.handle()
-async def _(bot: Bot, event: Event,params: Arparma):
+async def _(bot: Bot, event: Event, params: Arparma):
     base_config = Config.get("fuckornot")
     image = params.query("image") or await reply_fetch(event, bot)
     soul = params.query("soul") or base_config.get("default_soul")
@@ -142,68 +139,22 @@ async def _(bot: Bot, event: Event,params: Arparma):
         return
     if not image_bytes:
         await UniMessage("下载图片失败QAQ...").finish(reply_to=True)
-    data = {}
     provider = base_config.get("provider")
     preview = base_config.get("preview")
     preview_src = base64.b64encode(image_bytes).decode("utf-8") if preview else ""
-
-    model_config = LLMGenerationConfig(
-        response_mime_type="application/json",
-        response_schema={
-            "type": "OBJECT",
-            "properties": {
-                "verdict": {
-                    "type": "STRING",
-                    "description": "'上' 或 '不上'",
-                },
-                "rating": {
-                    "type": "STRING",
-                    "description": "1到10的数字",
-                },
-                "explanation": {
-                    "type": "STRING",
-                    "description": "你的评语/解释",
-                },
-            },
-            "nullable": False,
-            "required": ["verdict", "rating", "explanation"],
-        },
-        # safety_settings={
-        #     "HARM_CATEGORY_HARASSMENT": "BLOCK_NONE",
-        #     "HARM_CATEGORY_HATE_SPEECH": "BLOCK_NONE",
-        #     "HARM_CATEGORY_SEXUALLY_EXPLICIT": "BLOCK_NONE",
-        #     "HARM_CATEGORY_DANGEROUS_CONTENT": "BLOCK_NONE",
-        #     "HARM_CATEGORY_CIVIC_INTEGRITY": "BLOCK_NONE",
-        # },
-    )
     try:
-        async with await get_model_instance(provider) as model:
-            response = await model.generate_response(
-                messages=[
-                    LLMMessage.system(content=prompt),
-                    LLMMessage.user(
-                        [
-                            LLMContentPart.text_part("开始游戏。请评估这张艺术品"),
-                            LLMContentPart.image_base64_part(
-                                base64.b64encode(image_bytes).decode("utf-8"),
-                                "image/jpeg",
-                            ),
-                        ]
-                    ),
-                ],
-                config=model_config,
-            )
-            data = response.raw_response or {}
-        res = data["candidates"][0]["content"]["parts"][0]["text"]
-        if "`" in res:
-            res = res.replace("`", "")
-        if "json" in res:
-            res = res.replace("json", "")
-        if "\n" in res:
-            res = res.replace("\n", "")
-        if r"\n" in res:
-            res = res.replace(r"\n", "")
-        data: dict = ujson.loads(res)
+        response = await generate_structured(
+            message=[
+                LLMContentPart.text_part("开始游戏。请评估这张艺术品"),
+                LLMContentPart.image_base64_part(
+                    base64.b64encode(image_bytes).decode("utf-8"),
+                    "image/jpeg",
+                ),
+            ],
+            response_model=fuckResponse,
+            model=provider,
+            instruction=prompt,
+        )
 
         receipt = await UniMessage(
             Image(
@@ -211,9 +162,9 @@ async def _(bot: Bot, event: Event,params: Arparma):
                     str(Path(__file__).parent),
                     "result.html",
                     templates={
-                        "verdict": data["verdict"],
-                        "rating": data["rating"],
-                        "explanation": data["explanation"],
+                        "verdict": response.verdict,
+                        "rating": response.rating,
+                        "explanation": response.explanation,
                         "src": preview_src,
                     },
                 )
@@ -225,21 +176,9 @@ async def _(bot: Bot, event: Event,params: Arparma):
                 receipt.msg_ids[0]["message_id"],
                 time=withdraw_time,
             )
-
-    except Exception as e:
-        logger.error(f"评分失败...\n{data}", "fuckornot", e=e)
-        error_msg = data.get("candidates", [{}])[0].get("finishReason")
-        if error_msg:
-            receipt = await UniMessage(
-                f"评分失败，请稍后再试.\n错误信息: {error_msg}"
-            ).send(reply_to=True)
-        else:
-            receipt = await UniMessage(
-                f"评分失败，请稍后再试.\n错误信息: {type(e)}"
-            ).send(reply_to=True)
-        if withdraw_time > 0:
-            await WithdrawManager.withdraw_message(
-                bot,
-                receipt.msg_ids[0]["message_id"],
-                time=withdraw_time,
-            )
+    except LLMException as le:
+        raise le
+        logger.error(f"评分失败...\n{le.message}\n{le.details}", "fuckornot", e=le)
+        receipt = await UniMessage(
+            f"评分失败，请稍后再试.\n错误信息: {le.message}"
+        ).send(reply_to=True)

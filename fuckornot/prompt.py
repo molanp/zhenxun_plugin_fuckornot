@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from pydantic import BaseModel, Field
 import ujson
 
 soul_list = {
@@ -22,10 +23,16 @@ prompt: dict[str, str] = ujson.loads(
 
 def get_prompt(s: str | int):
     if isinstance(s, int) and not 0 < s <= len(soul_list):
-        raise ValueError(f"人格 {s} 不存在！")
+        raise ValueError("人格不存在！")
     if isinstance(s, str) and s not in soul_list.keys():
-        raise ValueError(f"人格 {s} 不存在！")
+        raise ValueError("人格不存在！")
     if isinstance(s, int):
         return prompt[list(soul_list.values())[s - 1]]
     else:
         return prompt[soul_list[s]]
+
+
+class fuckResponse(BaseModel):
+    verdict: str = Field(..., description="'上' 或 '不上'")
+    rating: str = Field(..., description="1到10的数字")
+    explanation: str = Field(..., description="你的评语/解释")
