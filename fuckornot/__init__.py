@@ -27,7 +27,7 @@ from zhenxun.utils.http_utils import AsyncHttpx
 from zhenxun.utils.platform import PlatformUtils
 from zhenxun.utils.withdraw_manage import WithdrawManager
 
-from .prompt import fuckResponse, get_prompt
+from .prompt import FuckResponse, get_prompt
 
 __plugin_meta__ = PluginMetadata(
     name="上不上",
@@ -151,7 +151,7 @@ async def _(bot: Bot, event: Event, params: Arparma):
                     "image/jpeg",
                 ),
             ],
-            response_model=fuckResponse,
+            response_model=FuckResponse,
             model=provider,
             instruction=prompt,
         )
@@ -177,7 +177,6 @@ async def _(bot: Bot, event: Event, params: Arparma):
                 time=withdraw_time,
             )
     except LLMException as le:
-        raise le
         logger.error(f"评分失败...\n{le.message}\n{le.details}", "fuckornot", e=le)
         receipt = await UniMessage(
             f"评分失败，请稍后再试.\n错误信息: {le.message}"

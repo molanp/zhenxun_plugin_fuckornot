@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from pydantic import BaseModel, Field
+from typing import Literal
 import ujson
 
 soul_list = {
@@ -33,6 +34,6 @@ def get_prompt(s: str | int):
 
 
 class fuckResponse(BaseModel):
-    verdict: str = Field(..., description="'上' 或 '不上'")
-    rating: str = Field(..., description="1到10的数字")
+    verdict: Literal["上", "不上"] = Field(..., description="'上' 或 '不上'")
+    rating: int = Field(..., description="1到10的数字")
     explanation: str = Field(..., description="你的评语/解释")
