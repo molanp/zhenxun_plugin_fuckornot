@@ -33,7 +33,7 @@ def get_prompt(s: str | int):
         return prompt[soul_list[s]]
 
 
-class fuckResponse(BaseModel):
+class FuckResponse(BaseModel):
     verdict: Literal["上", "不上"] = Field(..., description="'上' 或 '不上'")
     rating: int = Field(..., description="1到10的数字")
     explanation: str = Field(..., description="你的评语/解释")
