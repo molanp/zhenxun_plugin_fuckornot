@@ -34,9 +34,9 @@ __plugin_meta__ = PluginMetadata(
     description="上不上AI评分系统",
     usage="""
     上传图片，让AI来评判它的可操性
-        上 [图片]
-        上 @user
-        [回复]上
+        上/上不上 [图片]
+        上/上不上 @user
+        [回复]上/上不上
 
     -----人格列表，可以使用序号或名称指定人格-----
     |1  | 欲望化身
@@ -60,22 +60,26 @@ __plugin_meta__ = PluginMetadata(
         menu_type="群内小游戏",
         configs=[
             RegisterConfig(
+                module="fuckornot",
                 key="provider",
                 value="Gemini/gemini-2.5-flash-lite-preview-06-17",
                 help="AI服务提供者",
             ),
             RegisterConfig(
+                module="fuckornot",
                 key="withdraw_time",
                 value=30,
                 type=int,
                 help="撤回时间,单位秒, 0为不撤回",
             ),
             RegisterConfig(
+                module="fuckornot",
                 key="default_soul",
                 value="欲望化身",
                 help="不指定时的默认AI人格名称",
             ),
             RegisterConfig(
+                module="fuckornot",
                 key="preview",
                 value=False,
                 type=bool,
@@ -110,6 +114,7 @@ fuck = on_alconna(
             ],
         ),
     ),
+    aliases=["上不上"],
     block=True,
     priority=5,
 )
